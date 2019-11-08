@@ -16,3 +16,6 @@
 ![](images/rule_6.png)
 
 ![](images/rule_7.png)
+
+## 参考
+1、https://github.com/makcedward/nlpaug
