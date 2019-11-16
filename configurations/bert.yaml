@@ -1,0 +1,7 @@
+# 文件路径
+dev_set_path: datasources/original/dev_set.csv
+sample_submission_path: datasources/original/sample_submission.csv
+train_set_path: datasources/original/train_set.xml
+
+train_data_cache_path: datasources/cache/train_data.txt
+
