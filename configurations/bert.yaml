@@ -4,4 +4,4 @@ sample_submission_path: datasources/original/sample_submission.csv
 train_set_path: datasources/original/train_set.xml
 
 train_data_cache_path: datasources/cache/train_data.txt
-
+train_data_csv_cache_path: datasources/cache/train_data.csv

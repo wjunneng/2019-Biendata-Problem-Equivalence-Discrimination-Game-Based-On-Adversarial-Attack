@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*
 import os
+import pandas as pd
 from xml.dom.minidom import parse
 
 from configurations.constant import Constant
@@ -71,4 +72,20 @@ class Process(object):
 
 
 if __name__ == "__main__":
+    configuration = Constant(type=TYPE).get_configuration()
+    project_path = Constant(type=TYPE).get_project_path()
+    train_data_csv_cache_path = os.path.join(project_path, configuration.train_data_csv_cache_path)
     pair_list = Process().parse_train_data()
+    question1 = []
+    question2 = []
+    label = []
+    for pair in pair_list:
+        pair = pair.split('\t')
+        question1.append(pair[0])
+        question2.append(pair[1])
+        label.append(pair[2])
+    df = pd.DataFrame()
+    df['question1'] = question1
+    df['question2'] = question2
+    df['label'] = label
+    df.to_csv(train_data_csv_cache_path, index=False, encoding='utf-8')

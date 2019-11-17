@@ -5,12 +5,9 @@ import os
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-import time
-import logging
 from sklearn.model_selection import StratifiedKFold
 from keras_bert import load_trained_model_from_checkpoint, Tokenizer
 from keras.optimizers import Adam
-import pandas as pd
 from sklearn.metrics import mean_absolute_error, accuracy_score, f1_score
 from keras.layers import *
 from keras.models import Model
@@ -20,9 +17,9 @@ from keras.callbacks import Callback
 learning_rate = 5e-5
 min_learning_rate = 1e-5
 
-config_path = 'chinese_L-12_H-768_A-12/bert_config.json'
-checkpoint_path = 'chinese_L-12_H-768_A-12/bert_model.ckpt'
-dict_path = 'chinese_L-12_H-768_A-12/vocab.txt'
+config_path = '/home/wjunneng/Ubuntu/2019-Biendata-Problem-Equivalence-Discrimination-Game-Based-On-Adversarial-Attack/chinese_L-12_H-768_A-12/bert_config.json'
+checkpoint_path = '/home/wjunneng/Ubuntu/2019-Biendata-Problem-Equivalence-Discrimination-Game-Based-On-Adversarial-Attack/chinese_L-12_H-768_A-12/bert_model.ckpt'
+dict_path = '/home/wjunneng/Ubuntu/2019-Biendata-Problem-Equivalence-Discrimination-Game-Based-On-Adversarial-Attack/chinese_L-12_H-768_A-12/vocab.txt'
 
 MAX_LEN = 64
 
@@ -33,8 +30,8 @@ with open(dict_path, 'r', encoding='utf-8') as reader:
         token_dict[token] = len(token_dict)
 tokenizer = Tokenizer(token_dict)
 
-train = pd.read_csv('baifendian_data/train.csv')
-test = pd.read_csv('baifendian_data/dev_set.csv', sep='\t')
+train = pd.read_csv('/home/wjunneng/Ubuntu/2019-Biendata-Problem-Equivalence-Discrimination-Game-Based-On-Adversarial-Attack/datasources/cache/train_data.csv')
+test = pd.read_csv('/home/wjunneng/Ubuntu/2019-Biendata-Problem-Equivalence-Discrimination-Game-Based-On-Adversarial-Attack/datasources/original/dev_set.csv', sep='\t')
 train_achievements = train['question1'].values
 train_requirements = train['question2'].values
 labels = train['label'].values
@@ -176,10 +173,6 @@ class Evaluate(Callback):
         return score, acc, f1
 
 
-nfolds = 10
-skf = StratifiedKFold(n_splits=nfolds, shuffle=True, random_state=42)
-
-
 def predict(data):
     prob = []
     val_x1, val_x2 = data
@@ -194,29 +187,60 @@ def predict(data):
     return prob
 
 
+# nfolds = 10
+# skf = StratifiedKFold(n_splits=nfolds, shuffle=True, random_state=42)
+#
+# oof_train = np.zeros((len(train), 2), dtype=np.float32)
+# oof_test = np.zeros((len(test), 2), dtype=np.float32)
+# for fold, (train_index, valid_index) in enumerate(skf.split(train_achievements, labels)):
+#     x1 = train_achievements[train_index]
+#     x2 = train_requirements[train_index]
+#     y = labels_cat[train_index]
+#     val_x1 = train_achievements[valid_index]
+#     val_x2 = train_requirements[valid_index]
+#     val_y = labels[valid_index]
+#     val_cat = labels_cat[valid_index]
+#     train_D = data_generator([x1, x2, y])
+#     evaluator = Evaluate([val_x1, val_x2, val_y, val_cat], valid_index)
+#     model = get_model()
+#     model.fit_generator(train_D.__iter__(),
+#                         steps_per_epoch=len(train_D),
+#                         epochs=7,
+#                         callbacks=[evaluator]
+#                         )
+#     model.load_weights('bert{}.w'.format(fold))
+#     oof_test += predict([test_achievements, test_requirements])
+#     K.clear_session()
+# oof_test /= nfolds
+
 oof_train = np.zeros((len(train), 2), dtype=np.float32)
 oof_test = np.zeros((len(test), 2), dtype=np.float32)
-for fold, (train_index, valid_index) in enumerate(skf.split(train_achievements, labels)):
-    x1 = train_achievements[train_index]
-    x2 = train_requirements[train_index]
-    y = labels_cat[train_index]
-    val_x1 = train_achievements[valid_index]
-    val_x2 = train_requirements[valid_index]
-    val_y = labels[valid_index]
-    val_cat = labels_cat[valid_index]
-    train_D = data_generator([x1, x2, y])
-    evaluator = Evaluate([val_x1, val_x2, val_y, val_cat], valid_index)
-    model = get_model()
-    model.fit_generator(train_D.__iter__(),
-                        steps_per_epoch=len(train_D),
-                        epochs=7,
-                        callbacks=[evaluator]
-                        )
-    model.load_weights('bert{}.w'.format(fold))
-    oof_test += predict([test_achievements, test_requirements])
-    K.clear_session()
-oof_test /= nfolds
-test = pd.DataFrame(oof_test)
+
+ind = np.array(list(range(train.shape[0])))
+np.random.shuffle(ind)
+print(ind)
+
+train_index, valid_index = ind[:int(len(ind) * 0.8)], ind[int(len(ind) * 0.8):]
+
+x1 = train_achievements[train_index]
+x2 = train_requirements[train_index]
+y = labels_cat[train_index]
+val_x1 = train_achievements[valid_index]
+val_x2 = train_requirements[valid_index]
+val_y = labels[valid_index]
+val_cat = labels_cat[valid_index]
+train_D = data_generator([x1, x2, y])
+evaluator = Evaluate([val_x1, val_x2, val_y, val_cat], valid_index)
+model = get_model()
+model.fit_generator(train_D.__iter__(),
+                    steps_per_epoch=len(train_D),
+                    epochs=7,
+                    callbacks=[evaluator]
+                    )
+model.load_weights('bert.w')
+test = pd.DataFrame(predict([test_achievements, test_requirements]))
+K.clear_session()
+
 test.to_csv('test_pred.csv', index=False)
 test.head(), test.shape
 train = pd.DataFrame(oof_train)
