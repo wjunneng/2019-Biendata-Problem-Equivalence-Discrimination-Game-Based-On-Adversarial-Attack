@@ -5,3 +5,16 @@ train_set_path: datasources/original/train_set.xml
 
 train_data_cache_path: datasources/cache/train_data.txt
 train_data_csv_cache_path: datasources/cache/train_data.csv
+
+bert_config_path: chinese_L-12_H-768_A-12/bert_config.json
+bert_checkpoint_path: chinese_L-12_H-768_A-12/bert_model.ckpt
+bert_vocab_path: chinese_L-12_H-768_A-12/vocab.txt
+
+
+# 学习率
+learning_rate: 0.00005
+# 最小的学习率
+min_learning_rate: 0.00001
+# max len
+MAX_LEN: 64
+
