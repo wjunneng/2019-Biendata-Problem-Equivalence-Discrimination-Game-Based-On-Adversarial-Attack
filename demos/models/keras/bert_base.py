@@ -92,7 +92,7 @@ class BertBase(object):
         pred = pred.argmax(axis=1)
         sub = pd.DataFrame()
         sub['pred'] = list(pred)
-        sub.to_csv('sub.csv', sep='\t', header=None)
+        sub.to_csv('result.csv', sep='\t', header=None)
 
 
 if __name__ == '__main__':
