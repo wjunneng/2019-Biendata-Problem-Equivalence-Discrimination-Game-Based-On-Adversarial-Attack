@@ -53,12 +53,14 @@ class Process(object):
             equ_questions_list, not_equ_questions_list = [], []
             for q in equ_questions:
                 try:
-                    equ_questions_list.append(q.childNodes[0].data.strip())
+                    tmp = q.childNodes[0].data.strip().strip('？').strip('?').strip('。').strip('.').strip('!').strip('！')
+                    equ_questions_list.append(tmp)
                 except:
                     continue
             for q in not_equ_questions:
                 try:
-                    not_equ_questions_list.append(q.childNodes[0].data.strip())
+                    tmp = q.childNodes[0].data.strip().strip('？').strip('?').strip('。').strip('.').strip('!').strip('！')
+                    not_equ_questions_list.append(tmp)
                 except:
                     continue
             pair = Process.generate_train_data_pair(equ_questions_list, not_equ_questions_list)

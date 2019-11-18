@@ -57,8 +57,10 @@ class BertBase(object):
         oof_test = np.zeros((len(test), 2), dtype=np.float32)
 
         ind = np.array(list(range(train.shape[0])))
+
+        # 设置随机种子
+        np.random.seed(42)
         np.random.shuffle(ind)
-        print(ind)
 
         train_index, valid_index = ind[:int(len(ind) * 0.8)], ind[int(len(ind) * 0.8):]
 
