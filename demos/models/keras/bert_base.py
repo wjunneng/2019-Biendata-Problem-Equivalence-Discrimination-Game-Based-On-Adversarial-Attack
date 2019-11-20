@@ -71,7 +71,7 @@ class BertBase(object):
         val_x2 = train_requirements[valid_index]
         val_y = labels[valid_index]
         val_cat = labels_cat[valid_index]
-        train_D = DataGenerator(tokenizer=tokenizer, data=[x1, x2, y], batch_size=16, MAX_LEN=self.MAX_LEN)
+        train_D = DataGenerator(tokenizer=tokenizer, data=[x1, x2, y], batch_size=24, MAX_LEN=self.MAX_LEN)
         model = Util.get_model(bert_config_path=self.bert_config_path, bert_checkpoint_path=self.bert_checkpoint_path)
         evaluator = Evaluate(model=model, val_data=[val_x1, val_x2, val_y, val_cat], val_index=valid_index,
                              learning_rate=self.learning_rate, min_learning_rate=self.min_learning_rate,
