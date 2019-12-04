@@ -3,10 +3,11 @@ from keras.layers import *
 from keras.optimizers import Adam, Optimizer
 from tqdm import tqdm
 from keras_bert import Tokenizer, load_trained_model_from_checkpoint
-import keras.backend as K
 from keras.models import Model
 from keras.callbacks import Callback
 from keras.legacy import interfaces
+from keras import backend as K
+import tensorflow as tf
 from sklearn.metrics import mean_absolute_error, accuracy_score, f1_score
 
 
@@ -243,6 +244,16 @@ class Util(object):
     def __init__(self):
         pass
 
+    # @staticmethod
+    # def focal_loss(gamma=2., alpha=.25):
+    #     def focal_loss_fixed(y_true, y_pred):
+    #         pt_1 = tf.where(tf.equal(y_true, 1), y_pred, tf.ones_like(y_pred))
+    #         pt_0 = tf.where(tf.equal(y_true, 0), y_pred, tf.zeros_like(y_pred))
+    #         return -K.mean(alpha * K.pow(1. - pt_1, gamma) * K.log(pt_1)) - K.mean(
+    #             (1 - alpha) * K.pow(pt_0, gamma) * K.log(1. - pt_0))
+    #
+    #     return focal_loss_fixed
+
     @staticmethod
     def _get_tokenizer(path):
         """
@@ -303,7 +314,8 @@ class Util(object):
         output = Dense(2, activation='softmax')(T)
         model = Model([T1, T2], output)
         # model.compile(loss='categorical_crossentropy', optimizer=LazyOptimizer(Adam(1e-4)), metrics=['accuracy'])
-        model.compile(loss='categorical_crossentropy', optimizer=RAdam(lr=1e-4), metrics=['accuracy'])
+        # model.compile(loss=Util.focal_loss, optimizer=RAdam(lr=1e-4), metrics=['accuracy'])
+        model.compile(loss='focal_loss', optimizer=RAdam(lr=1e-4), metrics=['accuracy'])
         # 初始化Lookahead
         lookahead = Lookahead(k=5, alpha=0.5)
         # 插入到模型中
