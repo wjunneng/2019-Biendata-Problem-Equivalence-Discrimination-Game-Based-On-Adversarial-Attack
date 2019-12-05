@@ -56,66 +56,67 @@ class BertBase(object):
         print(train.shape, test.shape)
 
         # ############################################# 十折
-        nfolds = 5
-        skf = StratifiedKFold(n_splits=nfolds, shuffle=True, random_state=42)
-        evaluator = None
-        oof_train = np.zeros((len(train), 2), dtype=np.float32)
-        oof_test = np.zeros((len(test), 2), dtype=np.float32)
-        for fold, (train_index, valid_index) in enumerate(skf.split(train_achievements, labels)):
-            x1 = train_achievements[train_index]
-            x2 = train_requirements[train_index]
-            y = labels_cat[train_index]
-            val_x1 = train_achievements[valid_index]
-            val_x2 = train_requirements[valid_index]
-            val_y = labels[valid_index]
-            val_cat = labels_cat[valid_index]
-            train_D = DataGenerator(tokenizer=tokenizer, data=[x1, x2, y], batch_size=16, MAX_LEN=self.MAX_LEN)
-            model = Util.get_model(bert_config_path=self.bert_config_path,
-                                   bert_checkpoint_path=self.bert_checkpoint_path)
-            evaluator = Evaluate(model=model, val_data=[val_x1, val_x2, val_y, val_cat], val_index=valid_index,
-                                 learning_rate=self.learning_rate, min_learning_rate=self.min_learning_rate,
-                                 tokenizer=tokenizer, oof_train=oof_train, fold=fold)
-            model.fit_generator(train_D.__iter__(),
-                                steps_per_epoch=len(train_D),
-                                epochs=5,
-                                callbacks=[evaluator]
-                                )
-            model.load_weights('bert{}.w'.format(fold))
-            oof_test += Util.predict(data=[test_achievements, test_requirements], tokenizer=tokenizer, model=model)
-            K.clear_session()
-        oof_test /= nfolds
-        test = pd.DataFrame(oof_test)
-
-        # ############################################# 一折
+        # nfolds = 10
+        # skf = StratifiedKFold(n_splits=nfolds, shuffle=True, random_state=42)
+        # evaluator = None
         # oof_train = np.zeros((len(train), 2), dtype=np.float32)
         # oof_test = np.zeros((len(test), 2), dtype=np.float32)
-        # ind = np.array(list(range(train.shape[0])))
-        #
-        # # 设置随机种子
-        # np.random.seed(42)
-        # np.random.shuffle(ind)
-        # train_index, valid_index = ind[:int(len(ind) * 0.8)], ind[int(len(ind) * 0.8):]
-        #
-        # x1 = train_achievements[train_index]
-        # x2 = train_requirements[train_index]
-        # y = labels_cat[train_index]
-        # val_x1 = train_achievements[valid_index]
-        # val_x2 = train_requirements[valid_index]
-        # val_y = labels[valid_index]
-        # val_cat = labels_cat[valid_index]
-        # train_D = DataGenerator(tokenizer=tokenizer, data=[x1, x2, y], batch_size=64, MAX_LEN=self.MAX_LEN)
-        # model = Util.get_model(bert_config_path=self.bert_config_path, bert_checkpoint_path=self.bert_checkpoint_path)
-        # evaluator = Evaluate(model=model, val_data=[val_x1, val_x2, val_y, val_cat], val_index=valid_index,
-        #                      learning_rate=self.learning_rate, min_learning_rate=self.min_learning_rate,
-        #                      tokenizer=tokenizer, oof_train=oof_train, fold=None)
-        # model.fit_generator(train_D.__iter__(),
-        #                     steps_per_epoch=len(train_D),
-        #                     epochs=5,
-        #                     callbacks=[evaluator]
-        #                     )
-        # model.load_weights('bert.w')
-        # test = pd.DataFrame(Util.predict(data=[test_achievements, test_requirements], tokenizer=tokenizer, model=model))
-        # K.clear_session()
+        # for fold, (train_index, valid_index) in enumerate(skf.split(train_achievements, labels)):
+        #     x1 = train_achievements[train_index]
+        #     x2 = train_requirements[train_index]
+        #     y = labels_cat[train_index]
+        #     val_x1 = train_achievements[valid_index]
+        #     val_x2 = train_requirements[valid_index]
+        #     val_y = labels[valid_index]
+        #     val_cat = labels_cat[valid_index]
+        #     train_D = DataGenerator(tokenizer=tokenizer, data=[x1, x2, y], batch_size=8, MAX_LEN=self.MAX_LEN)
+        #     model = Util.get_model(bert_config_path=self.bert_config_path,
+        #                            bert_checkpoint_path=self.bert_checkpoint_path)
+        #     evaluator = Evaluate(model=model, val_data=[val_x1, val_x2, val_y, val_cat], val_index=valid_index,
+        #                          learning_rate=self.learning_rate, min_learning_rate=self.min_learning_rate,
+        #                          tokenizer=tokenizer, oof_train=oof_train, fold=fold)
+        #     model.fit_generator(train_D.__iter__(),
+        #                         steps_per_epoch=len(train_D),
+        #                         epochs=1,
+        #                         callbacks=[evaluator]
+        #                         )
+        #     model.load_weights('bert{}.w'.format(fold))
+        #     oof_test += Util.predict(data=[test_achievements, test_requirements], tokenizer=tokenizer, model=model)
+        #     K.clear_session()
+        # oof_test /= nfolds
+        # test = pd.DataFrame(oof_test)
+
+        # ############################################# 一折
+        oof_train = np.zeros((len(train), 2), dtype=np.float32)
+        oof_test = np.zeros((len(test), 2), dtype=np.float32)
+        ind = np.array(list(range(train.shape[0])))
+
+        # 设置随机种子
+        np.random.seed(42)
+        np.random.shuffle(ind)
+        train_index, valid_index = ind[:int(len(ind) * 0.8)], ind[int(len(ind) * 0.8):]
+
+        x1 = train_achievements[train_index]
+        x2 = train_requirements[train_index]
+        y = labels_cat[train_index]
+        val_x1 = train_achievements[valid_index]
+        val_x2 = train_requirements[valid_index]
+        val_y = labels[valid_index]
+        val_cat = labels_cat[valid_index]
+        train_D = DataGenerator(tokenizer=tokenizer, data=[x1, x2, y], batch_size=10, MAX_LEN=self.MAX_LEN)
+        model = Util.get_model(bert_config_path=self.bert_config_path, bert_checkpoint_path=self.bert_checkpoint_path)
+        evaluator = Evaluate(model=model, val_data=[val_x1, val_x2, val_y, val_cat], val_index=valid_index,
+                             learning_rate=self.learning_rate, min_learning_rate=self.min_learning_rate,
+                             tokenizer=tokenizer, oof_train=oof_train, fold=None)
+        model.fit_generator(train_D.__iter__(),
+                            steps_per_epoch=len(train_D),
+                            epochs=1,
+                            callbacks=[evaluator]
+                            )
+        model.load_weights('bert.w')
+        test = pd.DataFrame(Util.predict(data=[test_achievements, test_requirements], tokenizer=tokenizer, model=model))
+        K.clear_session()
+
 
         test.to_csv('test_pred.csv', index=False)
         train = pd.DataFrame(evaluator.get_oof_train())
