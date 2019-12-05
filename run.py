@@ -1,7 +1,6 @@
 import os
 
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0, 1"
-from sklearn.model_selection import StratifiedKFold
 
 "摘自https://zhuanlan.zhihu.com/p/82737301"
 import pandas as pd
@@ -9,8 +8,8 @@ import numpy as np
 import keras.backend as K
 from configurations.constant import Constant
 
-from demos.models.keras.util import DataGenerator, Evaluate
-from demos.models.keras.util import Util
+from demos.keras.util import DataGenerator, Evaluate
+from demos.keras.util import Util
 
 TYPE = 'bert'
 

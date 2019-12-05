@@ -315,7 +315,7 @@ class Util(object):
         model = Model([T1, T2], output)
         # model.compile(loss='categorical_crossentropy', optimizer=LazyOptimizer(Adam(1e-4)), metrics=['accuracy'])
         # model.compile(loss=Util.focal_loss, optimizer=RAdam(lr=1e-4), metrics=['accuracy'])
-        model.compile(loss='focal_loss', optimizer=RAdam(lr=1e-4), metrics=['accuracy'])
+        model.compile(loss='binary_crossentropy', optimizer=RAdam(lr=1e-4), metrics=['accuracy'])
         # 初始化Lookahead
         lookahead = Lookahead(k=5, alpha=0.5)
         # 插入到模型中
