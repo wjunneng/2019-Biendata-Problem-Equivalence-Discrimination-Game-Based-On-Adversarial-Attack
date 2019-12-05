@@ -16,7 +16,7 @@ python $CURRENT_DIR/demos/pytorch/run.py \
   --per_gpu_train_batch_size=16 \
   --per_gpu_eval_batch_size=16 \
   --learning_rate=2e-5 \
-  --num_train_epochs=4.0 \
+  --num_train_epochs=8.0 \
   --logging_steps=14923 \
   --save_steps=14923 \
   --output_dir=$OUTPUR_DIR/${TASK_NAME}_output/ \
