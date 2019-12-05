@@ -22,6 +22,7 @@ import glob
 import logging
 import os
 import numpy as np
+import pandas as pd
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
@@ -119,8 +120,9 @@ def train(args, train_dataset, model, tokenizer):
                       'attention_mask': batch[1],
                       'labels': batch[3]}
             if args.model_type != 'distilbert':
+                # XLM, DistilBERT don't use segment_ids
                 inputs['token_type_ids'] = batch[2] if args.model_type in ['bert', 'xlnet', 'albert',
-                                                                           'roberta'] else None  # XLM, DistilBERT don't use segment_ids
+                                                                           'roberta'] else None
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
@@ -154,8 +156,8 @@ def train(args, train_dataset, model, tokenizer):
                     output_dir = os.path.join(args.output_dir, 'checkpoint-{}'.format(global_step))
                     if not os.path.exists(output_dir):
                         os.makedirs(output_dir)
-                    model_to_save = model.module if hasattr(model,
-                                                            'module') else model  # Take care of distributed/parallel training
+                    # Take care of distributed/parallel training
+                    model_to_save = model.module if hasattr(model, 'module') else model
                     model_to_save.save_pretrained(output_dir)
                     torch.save(args, os.path.join(output_dir, 'training_args.bin'))
                     logger.info("Saving model checkpoint to %s", output_dir)
@@ -201,8 +203,9 @@ def evaluate(args, model, tokenizer, prefix=""):
                           'attention_mask': batch[1],
                           'labels': batch[3]}
                 if args.model_type != 'distilbert':
+                    # XLM, DistilBERT and RoBERTa don't use segment_ids
                     inputs['token_type_ids'] = batch[2] if args.model_type in ['bert', 'xlnet', 'albert',
-                                                                               'roberta'] else None  # XLM, DistilBERT and RoBERTa don't use segment_ids
+                                                                               'roberta'] else None
                 outputs = model(**inputs)
                 tmp_eval_loss, logits = outputs[:2]
                 eval_loss += tmp_eval_loss.mean().item()
@@ -261,8 +264,9 @@ def predict(args, model, tokenizer, prefix=""):
                           'attention_mask': batch[1],
                           'labels': batch[3]}
                 if args.model_type != 'distilbert':
+                    # XLM, DistilBERT and RoBERTa don't use segment_ids
                     inputs['token_type_ids'] = batch[2] if (
-                            'bert' in args.model_type or 'xlnet' in args.model_type) else None  # XLM, DistilBERT and RoBERTa don't use segment_ids
+                            'bert' in args.model_type or 'xlnet' in args.model_type) else None
                 outputs = model(**inputs)
                 _, logits = outputs[:2]
             nb_pred_steps += 1
@@ -276,16 +280,18 @@ def predict(args, model, tokenizer, prefix=""):
             preds = np.argmax(preds, axis=1)
         elif args.output_mode == "regression":
             preds = np.squeeze(preds)
-        output_pred_file = os.path.join(pred_output_dir, prefix, "test_prediction.txt")
-        with open(output_pred_file, "w") as writer:
-            for pred in preds:
-                writer.write(str(pred) + '\n')
+        output_pred_file = os.path.join(pred_output_dir, prefix, "test_prediction.csv")
+        result = pd.DataFrame(data=[i + 1 for i in range(len(preds))], columns=['qid'])
+        result['label'] = preds.tolist()
+        result.to_csv(output_pred_file, index=None)
+
     return results
 
 
 def load_and_cache_examples(args, task, tokenizer, data_type='train'):
     if args.local_rank not in [-1, 0] and not evaluate:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+        # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+        torch.distributed.barrier()
 
     processor = processors[task]()
     output_mode = output_modes[task]
@@ -327,9 +333,10 @@ def load_and_cache_examples(args, task, tokenizer, data_type='train'):
             torch.save(features, cached_features_file)
 
     if args.local_rank == 0 and not evaluate:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+        # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+        torch.distributed.barrier()
 
-    # Convert to Tensors and build dataset
+        # Convert to Tensors and build dataset
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
     all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
     all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
@@ -368,11 +375,11 @@ def main():
     parser.add_argument("--max_seq_length", default=128, type=int,
                         help="The maximum total input sequence length after tokenization. Sequences longer "
                              "than this will be truncated, sequences shorter will be padded.")
-    parser.add_argument("--do_train", action='store_true',
+    parser.add_argument("--do_train", default=True,
                         help="Whether to run training.")
-    parser.add_argument("--do_eval", action='store_true',
+    parser.add_argument("--do_eval", default=True,
                         help="Whether to run eval on the dev set.")
-    parser.add_argument("--do_predict", action='store_true',
+    parser.add_argument("--do_predict", default=True,
                         help="Whether to run the model in inference mode on the test set.")
     parser.add_argument("--do_lower_case", action='store_true',
                         help="Set this flag if you are using an uncased model.")
@@ -404,6 +411,8 @@ def main():
                         help="Save checkpoint every X updates steps.")
     parser.add_argument("--eval_all_checkpoints", action='store_true',
                         help="Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number")
+    parser.add_argument("--predict_all_checkpoints", action="store_true",
+                        help="Predict all checkpoints starting with the same prefix as model_name ending and ending with step number")
     parser.add_argument("--no_cuda", action='store_true',
                         help="Avoid using CUDA when available")
     parser.add_argument('--overwrite_output_dir', action='store_true',
@@ -488,33 +497,33 @@ def main():
 
     logger.info("Training/evaluation parameters %s", args)
 
-    # Training
-    if args.do_train:
-        train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, data_type='train')
-        global_step, tr_loss = train(args, train_dataset, model, tokenizer)
-        logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
-
-    # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
-    if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
-        # Create output directory if needed
-        if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
-            os.makedirs(args.output_dir)
-
-        logger.info("Saving model checkpoint to %s", args.output_dir)
-        # Save a trained model, configuration and tokenizer using `save_pretrained()`.
-        # They can then be reloaded using `from_pretrained()`
-        model_to_save = model.module if hasattr(model,
-                                                'module') else model  # Take care of distributed/parallel training
-        model_to_save.save_pretrained(args.output_dir)
-        tokenizer.save_pretrained(args.output_dir)
-
-        # Good practice: save your training arguments together with the trained model
-        torch.save(args, os.path.join(args.output_dir, 'training_args.bin'))
-
-        # Load a trained model and vocabulary that you have fine-tuned
-        model = model_class.from_pretrained(args.output_dir)
-        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
-        model.to(args.device)
+    # # Training
+    # if args.do_train:
+    #     train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, data_type='train')
+    #     global_step, tr_loss = train(args, train_dataset, model, tokenizer)
+    #     logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
+    #
+    # # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
+    # if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
+    #     # Create output directory if needed
+    #     if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
+    #         os.makedirs(args.output_dir)
+    #
+    #     logger.info("Saving model checkpoint to %s", args.output_dir)
+    #     # Save a trained model, configuration and tokenizer using `save_pretrained()`.
+    #     # They can then be reloaded using `from_pretrained()`
+    #     model_to_save = model.module if hasattr(model,
+    #                                             'module') else model  # Take care of distributed/parallel training
+    #     model_to_save.save_pretrained(args.output_dir)
+    #     tokenizer.save_pretrained(args.output_dir)
+    #
+    #     # Good practice: save your training arguments together with the trained model
+    #     torch.save(args, os.path.join(args.output_dir, 'training_args.bin'))
+    #
+    #     # Load a trained model and vocabulary that you have fine-tuned
+    #     model = model_class.from_pretrained(args.output_dir)
+    #     tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
+    #     model.to(args.device)
 
     # Evaluation
     results = {}
@@ -532,6 +541,29 @@ def main():
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
             result = evaluate(args, model, tokenizer, prefix=prefix)
+            result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
+            results.update(result)
+        output_eval_file = os.path.join(args.output_dir, "checkpoint_eval_results.txt")
+        with open(output_eval_file, "w") as writer:
+            for key in sorted(results.keys()):
+                writer.write("%s = %s\n" % (key, str(results[key])))
+
+    # Prediction
+    if args.do_predict and args.local_rank in [-1, 0]:
+        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
+        checkpoints = [args.output_dir]
+        if args.predict_all_checkpoints:
+            checkpoints = list(
+                os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True))
+            )
+            logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
+        logger.info("Predict the following checkpoints: %s", checkpoints)
+        for checkpoint in checkpoints:
+            global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
+            prefix = checkpoint.split('/')[-1] if checkpoint.find('checkpoint') != -1 else ""
+            model = model_class.from_pretrained(checkpoint)
+            model.to(args.device)
+            result = predict(args, model, tokenizer, prefix=prefix)
             result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
             results.update(result)
         output_eval_file = os.path.join(args.output_dir, "checkpoint_eval_results.txt")

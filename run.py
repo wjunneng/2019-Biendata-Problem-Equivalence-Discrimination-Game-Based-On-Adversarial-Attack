@@ -8,8 +8,8 @@ import numpy as np
 import keras.backend as K
 from configurations.constant import Constant
 
-from demos.keras.util import DataGenerator, Evaluate
-from demos.keras.util import Util
+from demos import DataGenerator, Evaluate
+from demos import Util
 
 TYPE = 'bert'
 
