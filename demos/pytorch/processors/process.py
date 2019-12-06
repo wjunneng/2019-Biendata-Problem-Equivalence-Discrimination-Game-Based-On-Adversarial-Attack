@@ -100,6 +100,7 @@ class Process(object):
 
 
 if __name__ == "__main__":
+    # 生成训练集和验证集
     configuration = Constant(type=TYPE).get_configuration()
     project_path = Constant(type=TYPE).get_project_path()
     train_data_csv_cache_path = os.path.join(project_path, configuration.train_data_csv_cache_path)
@@ -118,4 +119,5 @@ if __name__ == "__main__":
     df['label'] = label
     df.to_csv(train_data_csv_cache_path, index=False, encoding='utf-8')
 
-    # Process().generate_test_data()
+    # 生成测试集
+    Process().generate_test_data()

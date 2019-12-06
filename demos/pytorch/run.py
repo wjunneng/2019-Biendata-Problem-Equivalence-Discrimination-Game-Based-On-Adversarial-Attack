@@ -41,7 +41,7 @@ from processors import glue_output_modes as output_modes
 
 from processors import glue_processors as processors
 from processors import glue_convert_examples_to_features as convert_examples_to_features
-from processors import collate_fn, xlnet_collate_fn
+from processors import collate_fn, xlnet_collate_fn, FGM
 from tools.common import seed_everything
 from tools.common import init_logger, logger
 from tools.progressbar import ProgressBar
@@ -63,7 +63,6 @@ def train(args, train_dataset, model, tokenizer):
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size,
                                   collate_fn=xlnet_collate_fn if args.model_type in ['xlnet'] else collate_fn)
-
     if args.max_steps > 0:
         t_total = args.max_steps
         args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
@@ -110,24 +109,27 @@ def train(args, train_dataset, model, tokenizer):
     global_step = 0
     tr_loss, logging_loss = 0.0, 0.0
     model.zero_grad()
-    seed_everything(args.seed)  # Added here for reproductibility (even between python 2 and 3)
+    # Added here for reproductibility (even between python 2 and 3)
+    seed_everything(args.seed)
+
+    fgm = FGM(model)
     for _ in range(int(args.num_train_epochs)):
         pbar = ProgressBar(n_total=len(train_dataloader), desc='Training')
         for step, batch in enumerate(train_dataloader):
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
-            inputs = {'input_ids': batch[0],
-                      'attention_mask': batch[1],
-                      'labels': batch[3]}
+            inputs = {'input_ids': batch[0], 'attention_mask': batch[1], 'labels': batch[3]}
             if args.model_type != 'distilbert':
                 # XLM, DistilBERT don't use segment_ids
                 inputs['token_type_ids'] = batch[2] if args.model_type in ['bert', 'xlnet', 'albert',
                                                                            'roberta'] else None
             outputs = model(**inputs)
-            loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
+            # model outputs are always tuple in transformers (see doc)
+            loss = outputs[0]
 
             if args.n_gpu > 1:
-                loss = loss.mean()  # mean() to average on multi-gpu parallel training
+                # mean() to average on multi-gpu parallel training
+                loss = loss.mean()
             if args.gradient_accumulation_steps > 1:
                 loss = loss / args.gradient_accumulation_steps
 
@@ -139,10 +141,19 @@ def train(args, train_dataset, model, tokenizer):
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
+            # 对抗验证
+            # 在embedding上添加对抗扰动
+            fgm.attack()
+            outputs_adv = model(**inputs)
+            loss_adv = outputs_adv[0]
+            loss_adv.backward()
+            fgm.restore()
+
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
                 optimizer.step()
-                scheduler.step()  # Update learning rate schedule
+                # Update learning rate schedule
+                scheduler.step()
                 model.zero_grad()
                 global_step += 1
 
@@ -281,9 +292,9 @@ def predict(args, model, tokenizer, prefix=""):
         elif args.output_mode == "regression":
             preds = np.squeeze(preds)
         output_pred_file = os.path.join(pred_output_dir, prefix, "test_prediction.csv")
-        result = pd.DataFrame(data=[i + 1 for i in range(len(preds))], columns=['qid'])
+        result = pd.DataFrame(data=[i for i in range(len(preds))], columns=['qid'])
         result['label'] = preds.tolist()
-        result.to_csv(output_pred_file, index=None)
+        result.to_csv(output_pred_file, index=None, header=None, sep='\t')
 
     return results
 
@@ -352,20 +363,20 @@ def load_and_cache_examples(args, task, tokenizer, data_type='train'):
 def main():
     parser = argparse.ArgumentParser()
 
-    ## Required parameters
-    parser.add_argument("--data_dir", default=None, type=str, required=True,
+    # Required parameters
+    parser.add_argument("--data_dir", default=None, type=str,
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
-    parser.add_argument("--model_type", default=None, type=str, required=True,
+    parser.add_argument("--model_type", default=None, type=str,
                         help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
-    parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
+    parser.add_argument("--model_name_or_path", default=None, type=str,
                         help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(
                             ALL_MODELS))
-    parser.add_argument("--task_name", default=None, type=str, required=True,
+    parser.add_argument("--task_name", default=None, type=str,
                         help="The name of the task to train selected in the list: " + ", ".join(processors.keys()))
-    parser.add_argument("--output_dir", default=None, type=str, required=True,
+    parser.add_argument("--output_dir", default=None, type=str,
                         help="The output directory where the model predictions and checkpoints will be written.")
 
-    ## Other parameters
+    # Other parameters
     parser.add_argument("--config_name", default="", type=str,
                         help="Pretrained config name or path if not the same as model_name")
     parser.add_argument("--tokenizer_name", default="", type=str,
@@ -433,6 +444,27 @@ def main():
     parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
     args = parser.parse_args()
 
+    # ############################################# debug
+    # project_path = '/'.join(os.path.abspath(__file__).split('/')[:-3])
+    # args.model_type = 'albert'
+    # args.model_name_or_path = os.path.join(project_path, 'prev_trained_model')
+    # args.task_name = 'diac'
+    # args.do_train = True
+    # args.do_eval = True
+    # args.do_predict = True
+    # args.do_lower_case = True
+    # args.data_dir = os.path.join(project_path, 'datasources', args.task_name)
+    # args.max_seq_length = 128
+    # args.per_gpu_train_batch_size = 32
+    # args.per_gpu_eval_batch_size = 32
+    # args.learning_rate = 2e-5
+    # args.num_train_epochs = 1.0
+    # args.logging_steps = 14923
+    # args.save_steps = 14923
+    # args.output_dir = os.path.join(project_path, 'demos/pytorch/outputs', args.task_name+'_output')
+    # args.overwrite_output_dir = True
+    # ############################################# debug
+
     args.output_dir = args.output_dir + '{}'.format(args.model_type)
     if not os.path.exists(args.output_dir):
         os.mkdir(args.output_dir)
@@ -479,7 +511,8 @@ def main():
 
     # Load pretrained model and tokenizer
     if args.local_rank not in [-1, 0]:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
+        # Make sure only the first process in distributed training will download model & vocab
+        torch.distributed.barrier()
 
     args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
@@ -491,7 +524,8 @@ def main():
                                         config=config)
 
     if args.local_rank == 0:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
+        # Make sure only the first process in distributed training will download model & vocab
+        torch.distributed.barrier()
 
     model.to(args.device)
 
@@ -512,8 +546,8 @@ def main():
         logger.info("Saving model checkpoint to %s", args.output_dir)
         # Save a trained model, configuration and tokenizer using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
-        model_to_save = model.module if hasattr(model,
-                                                'module') else model  # Take care of distributed/parallel training
+        # Take care of distributed/parallel training
+        model_to_save = model.module if hasattr(model, 'module') else model
         model_to_save.save_pretrained(args.output_dir)
         tokenizer.save_pretrained(args.output_dir)
 

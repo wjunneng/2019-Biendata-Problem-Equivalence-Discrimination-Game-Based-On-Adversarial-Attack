@@ -15,9 +15,10 @@
 # limitations under the License.
 
 import csv
-import sys
+import torch
 import copy
 import json
+
 
 class InputExample(object):
     """
@@ -32,6 +33,7 @@ class InputExample(object):
         label: (Optional) string. The label of the example. This should be
         specified for train and dev examples, but not for test examples.
     """
+
     def __init__(self, guid, text_a, text_b=None, label=None):
         self.guid = guid
         self.text_a = text_a
@@ -64,7 +66,7 @@ class InputFeatures(object):
         label: Label corresponding to the input
     """
 
-    def __init__(self, input_ids, attention_mask, token_type_ids, label,input_len):
+    def __init__(self, input_ids, attention_mask, token_type_ids, label, input_len):
         self.input_ids = input_ids
         self.attention_mask = attention_mask
         self.token_type_ids = token_type_ids
@@ -118,3 +120,27 @@ class DataProcessor(object):
             for line in reader:
                 lines.append(line.strip().split("_!_"))
             return lines
+
+
+class FGM():
+    def __init__(self, model):
+        self.model = model
+        self.backup = {}
+
+    def attack(self, epsilon=1., emb_name='emb.'):
+        # emb_name这个参数要换成你模型中embedding的参数名
+        for name, param in self.model.named_parameters():
+            if param.requires_grad and emb_name in name:
+                self.backup[name] = param.data.clone()
+                norm = torch.norm(param.grad)
+                if norm != 0:
+                    r_at = epsilon * param.grad / norm
+                    param.data.add_(r_at)
+
+    def restore(self, emb_name='emb.'):
+        # emb_name这个参数要换成你模型中embedding的参数名
+        for name, param in self.model.named_parameters():
+            if param.requires_grad and emb_name in name:
+                assert name in self.backup
+                param.data = self.backup[name]
+        self.backup = {}
