@@ -26,4 +26,12 @@
 5. NotEquivalenceQuestions标签内的问句相互之间可能是等价的,也可能是不等价的.
 
 ## 参考
+
 1、https://github.com/makcedward/nlpaug
+
+2、https://github.com/FreeFlyXiaoMa/adversarial_attack
+
+### [图特征]
+3、https://www.kaggle.com/tour1st/magic-feature-v2-0-045-gain/notebook
+
+### data leak [数据泄漏]
